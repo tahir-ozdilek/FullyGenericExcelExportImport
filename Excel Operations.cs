@@ -70,114 +70,114 @@ namespace ExcelOperations
             return memoryStream.ToArray();
         }
 
-		public static bool ImportExcelFileToDb<T>(IDbFactory MyDbFactory, byte[] FileContent)
-		{
-			using var memoryStream = new MemoryStream(FileContent);
-			using IXLWorkbook workbook = new XLWorkbook(memoryStream);
+	public static bool ImportExcelFileToDb<T>(IDbFactory MyDbFactory, byte[] FileContent)
+	{
+		using var memoryStream = new MemoryStream(FileContent);
+		using IXLWorkbook workbook = new XLWorkbook(memoryStream);
 
-			IXLWorksheets worksheets = workbook.Worksheets;
-			//If File contain multiple or zero sheets, return -1;
-			if (worksheets.Count != 1)
+		IXLWorksheets worksheets = workbook.Worksheets;
+		//If File contain multiple or zero sheets, return -1;
+		if (worksheets.Count != 1)
+		{
+			return false;
+		}
+
+		IXLWorksheet worksheet = worksheets.First();
+		int columnCount = CountColumns(worksheet);
+
+		IXLRow _1stRow = worksheet.Rows().First();
+
+		//<ExcelIndex,PropName>KeyValue Pair
+		Dictionary<int,string> propsExcelIndexesAndNames = new();
+		int j = 1;
+		while (j < columnCount)
+		{
+			string val = _1stRow.Cell(j).Value.ToString()?.Replace(" ", "").Trim() ?? "";
+
+			propsExcelIndexesAndNames.Add(j,val);
+			j++;
+		}
+
+
+		//Get Property List of DataModel
+		Type classType = typeof(T);
+		PropertyInfo[] properties = classType.GetProperties();
+
+		//Asign prop names to hashSet
+		HashSet<string> propNamesOfDataModel = new HashSet<string>();
+		foreach (PropertyInfo prop in properties)
+		{
+			propNamesOfDataModel.Add(prop.Name);
+		}
+
+
+		//Check if the given column name exists in given model. If there is a column that doesnt match with props of model, return error.
+		foreach (KeyValuePair<int, string> PropExcelIndexName in propsExcelIndexesAndNames)
+		{
+			if(!propNamesOfDataModel.Contains(PropExcelIndexName.Value))
 			{
 				return false;
 			}
-
-			IXLWorksheet worksheet = worksheets.First();
-			int columnCount = CountColumns(worksheet);
-
-			IXLRow _1stRow = worksheet.Rows().First();
-
-			//<ExcelIndex,PropName>KeyValue Pair
-			Dictionary<int,string> propsExcelIndexesAndNames = new();
-			int j = 1;
-			while (j < columnCount)
-			{
-				string val = _1stRow.Cell(j).Value.ToString()?.Replace(" ", "").Trim() ?? "";
-
-				propsExcelIndexesAndNames.Add(j,val);
-				j++;
-			}
-
-
-			//Get Property List of DataModel
-			Type classType = typeof(T);
-			PropertyInfo[] properties = classType.GetProperties();
-
-			//Asign prop names to hashSet
-			HashSet<string> propNamesOfDataModel = new HashSet<string>();
-			foreach (PropertyInfo prop in properties)
-			{
-				propNamesOfDataModel.Add(prop.Name);
-			}
-
-
-			//Check if the given column name exists in given model. If there is a column that doesnt match with props of model, return error.
-			foreach (KeyValuePair<int, string> PropExcelIndexName in propsExcelIndexesAndNames)
-			{
-				if(!propNamesOfDataModel.Contains(PropExcelIndexName.Value))
-				{
-					return false;
-				}
-			}
-
-			List<T> dataToBeinserted = new();
-
-			//Set data to object, first row contains prop names therefore skip it.
-			foreach (var row in worksheet.Rows().Skip(1))
-			{
-				object? instance = Activator.CreateInstance(classType);
-
-				foreach (KeyValuePair<int, string> PropNameExcelIndex in propsExcelIndexesAndNames)
-				{
-					string valueReadFromExcel = row.Cell(PropNameExcelIndex.Key).Value.ToString();
-
-					PropertyInfo? prop = classType.GetProperty(PropNameExcelIndex.Value);
-					Type propertyType = prop.PropertyType;
-
-					object? convertedValue = null;
-					if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
-					{
-						Type? underlyingType = Nullable.GetUnderlyingType(propertyType);
-						convertedValue = string.IsNullOrEmpty(valueReadFromExcel) ? null : Convert.ChangeType(valueReadFromExcel, underlyingType);
-					}
-					else
-					{
-						convertedValue = Convert.ChangeType(valueReadFromExcel, propertyType);
-					}
-					prop?.SetValue(instance, convertedValue);
-				}
-
-				
-				if (instance == null)
-					throw new Exception("A null instance attempted to be inserted to list.");
-
-				dataToBeinserted.Add((T)instance);
-			}
-
-			//insert dataToBeinserted to db.
-			using var dbConnection = MyDbFactory.OpenDbConnection();
-
-			dbConnection.InsertAll(dataToBeinserted);
-			dbConnection.Close();
-
-			return true;
 		}
 
-		// Return column count of uploaded excel.
-		private int CountColumns(IXLWorksheet worksheet)
+		List<T> dataToBeinserted = new();
+
+		//Set data to object, first row contains prop names therefore skip it.
+		foreach (var row in worksheet.Rows().Skip(1))
 		{
-			IXLRow Row1st = worksheet.Rows().First();
+			object? instance = Activator.CreateInstance(classType);
 
-			int detectedColumnNumber = 0;
-			int i = 1;
-			//Count how many cells in first row are filled
-			while (Row1st.Cell(i).Value.ToString() != "")
+			foreach (KeyValuePair<int, string> PropNameExcelIndex in propsExcelIndexesAndNames)
 			{
-				i++;
-				detectedColumnNumber++;
+				string valueReadFromExcel = row.Cell(PropNameExcelIndex.Key).Value.ToString();
+
+				PropertyInfo? prop = classType.GetProperty(PropNameExcelIndex.Value);
+				Type propertyType = prop.PropertyType;
+
+				object? convertedValue = null;
+				if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
+				{
+					Type? underlyingType = Nullable.GetUnderlyingType(propertyType);
+					convertedValue = string.IsNullOrEmpty(valueReadFromExcel) ? null : Convert.ChangeType(valueReadFromExcel, underlyingType);
+				}
+				else
+				{
+					convertedValue = Convert.ChangeType(valueReadFromExcel, propertyType);
+				}
+				prop?.SetValue(instance, convertedValue);
 			}
 
-			return detectedColumnNumber;
+			
+			if (instance == null)
+				throw new Exception("A null instance attempted to be inserted to list.");
+
+			dataToBeinserted.Add((T)instance);
 		}
+
+		//insert dataToBeinserted to db.
+		using var dbConnection = MyDbFactory.OpenDbConnection();
+
+		dbConnection.InsertAll(dataToBeinserted);
+		dbConnection.Close();
+
+		return true;
+	}
+
+	// Return column count of uploaded excel.
+	private int CountColumns(IXLWorksheet worksheet)
+	{
+		IXLRow Row1st = worksheet.Rows().First();
+
+		int detectedColumnNumber = 0;
+		int i = 1;
+		//Count how many cells in first row are filled
+		while (Row1st.Cell(i).Value.ToString() != "")
+		{
+			i++;
+			detectedColumnNumber++;
+		}
+
+		return detectedColumnNumber;
+	}
     }
 }
