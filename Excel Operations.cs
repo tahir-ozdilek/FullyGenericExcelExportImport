@@ -28,7 +28,7 @@ namespace ExcelOperations
             Type objectType = typeof(T);
             PropertyInfo[] properties = objectType.GetProperties();
 
-			int k = 1;
+	    int k = 1;
             foreach (PropertyInfo property in properties)
             {
                 workSheet.Cell(1, k).Value = Regex.Replace(property.Name, "(\\B[A-Z])", " $1");
@@ -36,7 +36,7 @@ namespace ExcelOperations
                 workSheet.Cell(1, k).Style.Fill.BackgroundColor = XLColor.LightGray;
                 workSheet.Cell(1, k).Style.Font.SetBold();
                 workSheet.Cell(1, k).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-				k++;
+		k++;
             }
 
             int i = 2;
@@ -49,7 +49,7 @@ namespace ExcelOperations
                     if (cell != null)
                     {
                        //if, else blocks can be added for writing data to excel cells in desired formats. 
-					   workSheet.Cell(i, j).Value = cell.ToString();  
+		       workSheet.Cell(i, j).Value = cell.ToString();  
                     }
                     j++;
                 }
